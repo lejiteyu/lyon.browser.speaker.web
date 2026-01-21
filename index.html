@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>瀏覽紀錄同步檢視 (Drive AppData)</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h1>☁️ 瀏覽紀錄同步檢視</h1>
+            <p>讀取 Android App 上傳至 Google Drive AppData 的備份資料</p>
+        </header>
+
+        <div class="controls">
+            <button id="authBtn" class="btn-primary" style="display: none;">登入並讀取紀錄</button>
+            <div id="status" class="status-msg">等待 API 初始化...</div>
+        </div>
+
+        <div id="display-area" style="display: none;">
+    
+            <section>
+                <h2>📖 當前閱讀 (Current URL) - 編輯模式</h2>
+                <div class="editor-container">
+                    <div class="url-input-group">
+                        <input type="text" id="current-url-input" class="url-input" placeholder="輸入網址...">
+                        <button id="open-new-tab-btn" class="btn-secondary">🔗 外開</button>
+                    </div>
+                    
+                    <div id="upload-bar" class="upload-bar" style="display: none;">
+                        <span>⚠️網址已修改，尚未儲存</span>
+                        <button onclick="uploadChanges()" class="btn-save">☁️ 上傳更新至雲端</button>
+                    </div>
+
+                    <div class="iframe-wrapper">
+                        <p class="iframe-hint">💡 提示：如果下方顯示「拒絕連線」，代表該網站禁止嵌入，請使用「外開」按鈕。</p>
+                        <iframe id="current-iframe" src="" frameborder="0"></iframe>
+                    </div>
+                </div>
+            </section>
+
+            <section>
+                <h2>📑 分頁列表 (Tabs) - 預覽模式</h2>
+                <div id="tabs-container" class="grid-container">
+                    </div>
+            </section>
+
+            <section>
+                <h2>clock 歷史紀錄 (History)</h2>
+                <ul id="history-container" class="history-list"></ul>
+            </section>
+
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+
+    <script src="https://apis.google.com/js/api.js" onload="gapiLoaded()" async defer></script>
+    <script src="https://accounts.google.com/gsi/client" onload="gisLoaded()" async defer></script>
+
+</body>
+</html>
