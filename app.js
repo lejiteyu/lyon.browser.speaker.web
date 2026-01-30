@@ -9,6 +9,7 @@ const FILE_NAME = 'browser_tabs_backup.json';
 let tokenClient;
 let gapiInited = false;
 let gisInited = false;
+let isPendingRetry = false; // ★ 關鍵：用來標記是否正在等待重試
 // === 新增全域變數 ===
 let globalData = null;   // 暫存下載下來的 JSON 資料
 let globalFileId = null; // 暫存雲端檔案 ID
@@ -35,7 +36,23 @@ function gisLoaded() {
         tokenClient = google.accounts.oauth2.initTokenClient({
             client_id: CLIENT_ID,
             scope: SCOPES,
-            callback: '', // 動態指定
+            // ★ 修改：callback 邏輯重寫，支援按鈕狀態切換與自動重試
+            callback: (resp) => {
+                if (resp.error !== undefined) {
+                    throw (resp);
+                }
+                
+                // 1. 授權成功，更新按鈕狀態
+                console.log("授權成功");
+                updateButtonState(true); 
+
+                // 2. ★ 檢查是否為「自動重試」的流程
+                if (isPendingRetry) {
+                    console.log("重登成功，自動重新執行下載...");
+                    isPendingRetry = false; // 重置旗標
+                    listAndReadAppData();   // 自動再次執行下載，不用用戶點
+                }
+            },
         });
         gisInited = true;
         checkAuthAvailable();
@@ -46,9 +63,8 @@ function gisLoaded() {
 
 function checkAuthAvailable() {
     if (gapiInited && gisInited) {
-        document.getElementById('authBtn').style.display = 'inline-block';
-        updateStatus('系統就緒，請登入。');
-        
+        // ★ 修改：初始化時先設定為「登入」狀態
+        updateButtonState(false);
         // 綁定按鈕事件
         document.getElementById('authBtn').onclick = handleAuthClick;
     }
@@ -59,19 +75,34 @@ function updateStatus(msg) {
     console.log('[Status]', msg);
 }
 
+// ★ 新增：按鈕狀態切換函式
+function updateButtonState(isSignedIn) {
+    const btn = document.getElementById('authBtn');
+    btn.style.display = 'inline-block';
+    
+    if (isSignedIn) {
+        btn.innerText = "☁️ 下載資料";
+        // 如果有 CSS class 可以切換顏色
+        // btn.classList.add('btn-success'); 
+        updateStatus('已登入，請點擊下載。');
+    } else {
+        btn.innerText = "登入並讀取紀錄";
+        updateStatus('系統就緒，請登入。');
+    }
+}
+
 // === 2. 登入與 API 呼叫 ===
 async function handleAuthClick() {
-    if (!tokenClient) return;
-
-    tokenClient.callback = async (resp) => {
-        if (resp.error) throw resp;
-        await listAndReadAppData();
-    };
-
-    if (gapi.client.getToken() === null) {
-        tokenClient.requestAccessToken({prompt: 'consent'});
+    const btn = document.getElementById('authBtn');
+    
+    if (btn.innerText.includes("登入")) {
+        // 狀態 A: 還沒登入 -> 執行登入 (跳出視窗)
+        if (tokenClient) {
+            tokenClient.requestAccessToken({prompt: 'consent'});
+        }
     } else {
-        tokenClient.requestAccessToken({prompt: ''});
+        // 狀態 B: 已經是「下載資料」 -> 執行下載邏輯
+        listAndReadAppData();
     }
 }
 //========(加入變數暫存)======================
@@ -104,6 +135,21 @@ async function listAndReadAppData() {
     } catch (err) {
         updateStatus('發生錯誤: ' + err.message);
         console.error(err);
+
+        // ★ 修改：失敗重試邏輯
+        // 401 = 未授權 (Token 過期), 403 = 禁止存取
+        if (err.status === 401 || err.status === 403) {
+            updateStatus("憑證過期，正在自動重新登入...");
+            console.log("Token 失效，觸發自動重登...");
+
+            // 設定旗標：告訴 gisLoaded callback 等一下登入成功後，要自動再跑一次 listAndReadAppData
+            isPendingRetry = true;
+
+            // 觸發登入 (使用 prompt: '' 嘗試靜默登入，減少彈窗干擾)
+            tokenClient.requestAccessToken({prompt: ''});
+        } else {
+            updateStatus('發生錯誤: ' + (err.result?.error?.message || err.message));
+        }
     }
 }
 
