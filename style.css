@@ -36,20 +36,29 @@ h2 { border-bottom: 2px solid #e0e0e0; padding-bottom: 10px; margin-top: 40px; c
 .status-msg { margin-top: 10px; color: #666; font-size: 0.9em; }
 
 /* === RWD 網格系統 (核心) === */
+/* 分頁列表容器 (Grid 佈局) */
 .grid-container {
     display: grid;
-    grid-template-columns: 1fr; /* 手機預設單欄 */
-    gap: 20px;
+    
+    /* ★ 修改重點 1：強制分為 2 欄，每欄各佔一半 (1fr) */
+    grid-template-columns: repeat(2, 1fr); 
+    
+    gap: 20px; /* 間距稍微加大一點比較好看 */
+    padding: 10px;
 }
 
-/* 平板 (寬度 > 600px) */
-@media (min-width: 600px) {
-    .grid-container { grid-template-columns: repeat(2, 1fr); }
+/* ★ 修改重點 2：針對手機或窄螢幕的優化 */
+/* 當螢幕寬度小於 768px (一般手機或直立平板) 時，變回 1 欄 */
+@media (max-width: 768px) {
+    .grid-container {
+        grid-template-columns: 1fr; /* 手機版改為單欄顯示，避免太擠 */
+    }
 }
+
 
 /* 電腦 (寬度 > 900px) */
 @media (min-width: 900px) {
-    .grid-container { grid-template-columns: repeat(3, 1fr); }
+    .grid-container { grid-template-columns: repeat(2, 1fr); }
 }
 
 /* === 卡片樣式 (用於 Current URL & Tabs) === */
@@ -223,3 +232,77 @@ iframe {
 }
 
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+
+/* 分頁卡片容器 - 必須加上 position: relative */
+.editor-container {
+    position: relative; /* 關鍵：讓內部的絕對定位按鈕以這裡為基準 */
+    padding: 10px;
+    border: 1px solid #eee;
+    margin-bottom: 10px;
+    background: #fff;
+    border-radius: 8px;
+    transition: all 0.2s;
+}
+
+.editor-container:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+/* 刪除按鈕樣式 */
+.delete-btn {
+    position: absolute;
+    top: -10px;       /* 稍微凸出上方 */
+    left: -10px;      /* 稍微凸出左方 */
+    width: 24px;
+    height: 24px;
+    background-color: #ff4d4f; /* 紅色 */
+    margin-top: 10px;
+    margin-left: 10px;
+    color: white;
+    border: none;
+    border-radius: 50%; /* 圓形 */
+    font-size: 16px;
+    line-height: 22px;
+    text-align: center;
+    cursor: pointer;
+    z-index: 10;      /* 確保在 iframe 上層 */
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.delete-btn:hover {
+    background-color: #ff7875;
+    transform: scale(1.1);
+}
+
+
+/* === 手機版響應式設定 (螢幕小於 768px 時觸發) === */
+@media (max-width: 768px) {
+    
+    /* 1. 針對 body：移除背景色與邊距，讓畫面更乾淨 */
+    body {
+        padding: 0;
+        margin: 0;
+        background-color: #fff; /* 將背景改成白色，與卡片融合 */
+    }
+
+    /* 2. 針對 container：強制滿版 */
+    .container {
+        width: 100%;           /* 寬度佔滿 100% */
+        max-width: none;       /* 取消最大寬度限制 */
+        margin: 0;             /* 移除上下左右的外邊距 */
+        border-radius: 0;      /* 移除圓角 (變成直角) */
+        box-shadow: none;      /* 移除陰影 (因為已經滿版了，不需要浮起來的效果) */
+        min-height: 100vh;     /* 讓白色區塊至少佔滿整個螢幕高度 */
+        padding: 15px;         /* 內容稍微保留一點內邊距 */
+    }
+
+    /* 3. (選用) 調整標題大小，避免手機上字太大 */
+    header h1 {
+        font-size: 24px;
+        margin-top: 10px;
+    }
+}

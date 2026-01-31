@@ -36,22 +36,28 @@ function gisLoaded() {
         tokenClient = google.accounts.oauth2.initTokenClient({
             client_id: CLIENT_ID,
             scope: SCOPES,
-            // ★ 修改：callback 邏輯重寫，支援按鈕狀態切換與自動重試
             callback: (resp) => {
                 if (resp.error !== undefined) {
                     throw (resp);
                 }
                 
-                // 1. 授權成功，更新按鈕狀態
+                // 1. 授權成功
                 console.log("授權成功");
+                
+                // 2. 更新按鈕狀態 (變成「☁️ 下載資料」)
                 updateButtonState(true); 
 
-                // 2. ★ 檢查是否為「自動重試」的流程
+                // 3. ★★★ 修改這裡：不再判斷 isPendingRetry，直接下載 ★★★
+                // 這樣「第一次登入」或「自動重試」都會自動觸發下載，用戶不用再點一次
                 if (isPendingRetry) {
-                    console.log("重登成功，自動重新執行下載...");
+                    console.log("重登成功，繼續執行之前的下載任務...");
                     isPendingRetry = false; // 重置旗標
-                    listAndReadAppData();   // 自動再次執行下載，不用用戶點
+                } else {
+                    console.log("登入成功，自動開始下載...");
                 }
+
+                // 立即執行下載
+                listAndReadAppData();
             },
         });
         gisInited = true;
@@ -153,52 +159,48 @@ async function listAndReadAppData() {
     }
 }
 
-// === 3. 畫面渲染邏輯 ===
+// === 3. 畫面渲染邏輯 (修改版) ===
 function renderData(data) {
     document.getElementById('display-area').style.display = 'block';
 
-    // A. 渲染 Current URL
+    // A. 渲染 Current URL (保持不變)
     const urlInput = document.getElementById('current-url-input');
     const iframe = document.getElementById('current-iframe');
     const newTabBtn = document.getElementById('open-new-tab-btn');
     const uploadBar = document.getElementById('upload-bar');
 
-    // 初始化數值
     if (data.currentUrl) {
         urlInput.value = data.currentUrl;
         iframe.src = data.currentUrl;
-        
-        // 綁定外開按鈕
         newTabBtn.onclick = () => window.open(urlInput.value, '_blank');
     }
 
-    // ★ 綁定監聽：當網址修改時
     urlInput.oninput = function() {
         const newUrl = this.value;
-        // 1. 更新 iframe 預覽 (稍微延遲避免頻繁重整)
-        // iframe.src = newUrl; 
-        
-        // 2. 更新全域資料物件
         globalData.currentUrl = newUrl;
-
-        // 3. 顯示上傳按鈕
         uploadBar.style.display = 'flex';
         updateStatus('檢測到變更，請點擊上傳按鈕儲存。');
     };
 
-    //B. 處理 Tabs (也改用 iframe 預覽，但為了效能，建議預設摺疊或只顯示前幾個)
+    // B. 處理 Tabs (★ 修改這裡：加入刪除按鈕)
     const tabsContainer = document.getElementById('tabs-container');
     tabsContainer.innerHTML = '';
     
     if (data.tabs && Array.isArray(data.tabs)) {
         data.tabs.forEach((tab, index) => {
-            // 這裡我們用一個簡化的 iframe 卡片
+            const tabTitle = tab.title || tab.Url; 
+            
+            // 加入刪除按鈕 HTML
+            // 注意：editor-container 樣式已移至 CSS 處理
             const tabHtml = `
-                <div class="editor-container" style="padding: 10px; border: 1px solid #eee;">
-                    <div style="margin-bottom: 5px; font-weight: bold;">
-                        分頁 #${index + 1} (Pos: ${tab.speakPos})
-                        <button onclick="window.open('${tab.Url}', '_blank')" style="float: right; font-size: 12px;">外開</button>
+                <div class="editor-container">
+                    <button class="delete-btn" onclick="deleteTab(${index})" title="刪除此分頁">×</button>
+
+                    <div style="margin-bottom: 5px; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-left: 15px;">
+                        #${index + 1} ${escapeHtml(tabTitle)}
+                        <button onclick="window.open('${tab.Url}', '_blank')" style="float: right; font-size: 12px; cursor: pointer;">外開</button>
                     </div>
+                    <div style="font-size: 12px; color: #666; margin-bottom: 5px; padding-left: 15px;">${escapeHtml(tab.Url)}</div>
                     <div class="iframe-wrapper" style="height: 200px;">
                         <iframe src="${tab.Url}" loading="lazy"></iframe>
                     </div>
@@ -208,10 +210,38 @@ function renderData(data) {
         });
     }
 
-    // C. 渲染 History (TabWebHistory)
+    // C. 渲染 History (保持不變)
     renderHistory(data);
 }
 
+// === 新增：刪除分頁功能 ===
+async function deleteTab(index) {
+    // 1. 跳出確認視窗
+    const isConfirmed = confirm("⚠️ 確定要刪除這個分頁嗎？\n\n刪除後將會立即同步至雲端，無法復原。");
+    
+    if (!isConfirmed) {
+        return; // 使用者取消
+    }
+
+    try {
+        // 2. 從全域資料中移除該項目
+        // splice(開始位置, 刪除數量)
+        const deletedTab = globalData.tabs.splice(index, 1);
+        console.log("已移除分頁:", deletedTab);
+
+        // 3. 立即重新渲染畫面 (讓使用者覺得反應很快)
+        renderData(globalData);
+        
+        // 4. 自動觸發上傳
+        updateStatus(`分頁 #${index + 1} 已刪除，正在同步至雲端...`);
+        await uploadChanges();
+
+    } catch (err) {
+        console.error("刪除失敗", err);
+        updateStatus("刪除時發生錯誤: " + err.message);
+        alert("刪除失敗，請重新整理網頁後再試");
+    }
+}
 // 為了版面乾淨，把 History 渲染獨立出來
 function renderHistory(data) {
     const historyContainer = document.getElementById('history-container');
